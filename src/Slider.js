@@ -22,7 +22,7 @@ const {
   interpolate,
   multiply,
   block,
-  or
+  or,
 } = Animated;
 
 const BUBBLE_WIDTH = 100;
@@ -54,7 +54,7 @@ type Props = {
    * a function that gets the current value of the slider as you slide it,
    * and returns a string to be used in the ballon
    */
-  ballon: number => string,
+  ballon: (number) => string,
 
   /**
    * an AnimatedValue from `react-native-reanimated` library which is the
@@ -85,7 +85,7 @@ type Props = {
    * callback called when the users stops sliding. the new value will be passed as
    * argument
    */
-  onSlidingComplete: number => void,
+  onSlidingComplete: (number) => void,
   /**
    * render custom Ballon to show when sliding.
    */
@@ -94,7 +94,7 @@ type Props = {
    * this function will be called while sliding, and should set the text inside your custom
    * ballon.
    */
-  setBallonText?: string => void,
+  setBallonText?: (string) => void,
 
   /**
    * value to pass to the container of the ballon as `translateY`
@@ -109,7 +109,10 @@ type Props = {
   /**
    * thumb offset from the end of seek
    */
-  thumbOffset?: number
+  thumbOffset?: number,
+  trackHeight?: number,
+  trackBorderWidth?: number,
+  showCache?: boolean,
 };
 
 /**
@@ -165,12 +168,15 @@ class Slider extends React.Component<Props> {
     borderColor: "#fff",
     thumbOffset: 7,
     ballonTranslateY: -25,
+    trackHeight: 5,
+    trackBorderWidth: 1,
+    showCache: true,
   };
   ballon = React.createRef();
   constructor(props) {
     const { progress, min, max, cache } = props;
     super(props);
-    this.convert_to_percent = value =>
+    this.convert_to_percent = (value) =>
       cond(eq(min, max), 0, divide(value, sub(max, min)));
     this.gestureState = new Value(0);
     this.x = new Value(0);
@@ -183,7 +189,7 @@ class Slider extends React.Component<Props> {
       interpolate(this.x, {
         inputRange: [0, this.width],
         outputRange: [0, this.width],
-        extrapolate: Extrapolate.CLAMP
+        extrapolate: Extrapolate.CLAMP,
       })
     );
     this.value_x = divide(multiply(this.clamped_x, max), this.width);
@@ -191,9 +197,9 @@ class Slider extends React.Component<Props> {
       {
         nativeEvent: {
           state: this.gestureState,
-          x: this.x
-        }
-      }
+          x: this.x,
+        },
+      },
     ]);
     this.clock = new Clock();
     this.seek = block([
@@ -203,36 +209,42 @@ class Slider extends React.Component<Props> {
           eq(this.gestureState, State.BEGAN)
         ),
         [
-          call([this.value_x], x => {
+          call([this.value_x], (x) => {
             this.props.setBallonText
               ? this.props.setBallonText(props.ballon(x[0]))
               : this.ballon.current.setText(props.ballon(x[0]));
           }),
           cond(
             eq(this.gestureState, State.BEGAN),
-            call([this.value_x], () => props.onSlidingStart && props.onSlidingStart())
+            call(
+              [this.value_x],
+              () => props.onSlidingStart && props.onSlidingStart()
+            )
           ),
-          this.clamped_x
+          this.clamped_x,
         ],
         [
           cond(
             eq(this.gestureState, State.END),
             [
               set(this.gestureState, State.UNDETERMINED),
-              call([this.value_x], x => props.onSlidingComplete && props.onSlidingComplete(x[0])),
-              this.clamped_x
+              call(
+                [this.value_x],
+                (x) => props.onSlidingComplete && props.onSlidingComplete(x[0])
+              ),
+              this.clamped_x,
             ],
             [this.progress_x]
-          )
+          ),
         ]
-      )
+      ),
     ]);
     this.thumb = sub(this.seek, this.props.thumbOffset);
     this.spring_state = {
       finished: new Value(0),
       velocity: new Value(0),
       position: new Value(0),
-      time: new Value(0)
+      time: new Value(0),
     };
     this.runspring = ({ toValue }) => {
       const config = {
@@ -242,7 +254,7 @@ class Slider extends React.Component<Props> {
         overshootClamping: false,
         restSpeedThreshold: 0.001,
         restDisplacementThreshold: 0.001,
-        toValue: new Value(0)
+        toValue: new Value(0),
       };
       return [
         cond(clockRunning(this.clock), 0, [
@@ -250,11 +262,11 @@ class Slider extends React.Component<Props> {
           set(this.spring_state.velocity, 0),
           // set(this.spring_state.position, from),
           set(config.toValue, toValue),
-          startClock(this.clock)
+          startClock(this.clock),
         ]),
         spring(this.clock, this.spring_state, config),
         cond(this.spring_state.finished, [stopClock(this.clock)]),
-        this.spring_state.position
+        this.spring_state.position,
       ];
     };
     this.height = cond(
@@ -280,7 +292,7 @@ class Slider extends React.Component<Props> {
   _renderBallon = () => {
     return <Ballon ref={this.ballon} />;
   };
-  _renderThumbImage = style => {
+  _renderThumbImage = (style) => {
     return <View style={style} />;
   };
   render() {
@@ -294,7 +306,10 @@ class Slider extends React.Component<Props> {
       cacheTrackTintColor,
       borderColor,
       ballonTranslateY,
-      thumbOffset
+      thumbOffset,
+      trackHeight,
+      trackBorderWidth,
+      showCache,
     } = this.props;
 
     const ballonRenderer = renderBallon || this._renderBallon;
@@ -304,7 +319,8 @@ class Slider extends React.Component<Props> {
       <PanGestureHandler
         onGestureEvent={this.onGestureEvent}
         onHandlerStateChange={this.onGestureEvent}
-        minDist={0}>
+        minDist={0}
+      >
         <Animated.View
           style={[
             {
@@ -313,30 +329,34 @@ class Slider extends React.Component<Props> {
               overflow: "visible",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "#3330"
+              backgroundColor: "#3330",
             },
-            style
+            style,
           ]}
-          onLayout={this._onLayout}>
+          onLayout={this._onLayout}
+        >
           <Animated.View
             style={{
               width: "100%",
-              height: 5,
+              height: trackHeight,
               borderRadius: 2,
               borderColor: borderColor,
               overflow: "hidden",
-              borderWidth: 1,
-              backgroundColor: maximumTrackTintColor
-            }}>
-            <Animated.View
-              style={{
-                backgroundColor: cacheTrackTintColor,
-                height: "100%",
-                width: this.cache_x,
-                [I18nManager.isRTL ? "right" : "left"]: 0,
-                position: "absolute"
-              }}
-            />
+              borderWidth: trackBorderWidth,
+              backgroundColor: maximumTrackTintColor,
+            }}
+          >
+            {showCache && (
+              <Animated.View
+                style={{
+                  backgroundColor: cacheTrackTintColor,
+                  height: "100%",
+                  width: this.cache_x,
+                  [I18nManager.isRTL ? "right" : "left"]: 0,
+                  position: "absolute",
+                }}
+              />
+            )}
             <Animated.View
               style={{
                 backgroundColor: minimumTrackTintColor,
@@ -344,20 +364,21 @@ class Slider extends React.Component<Props> {
                 maxWidth: "100%",
                 width: this.seek,
                 [I18nManager.isRTL ? "right" : "left"]: 0,
-                position: "absolute"
+                position: "absolute",
               }}
             />
           </Animated.View>
           <Animated.View
             style={{
               [I18nManager.isRTL ? "right" : "left"]: this.thumb,
-              position: "absolute"
-            }}>
+              position: "absolute",
+            }}
+          >
             {thumbRenderer({
               backgroundColor: minimumTrackTintColor,
               height: 15,
               width: 15,
-              borderRadius: 30
+              borderRadius: 30,
             })}
           </Animated.View>
 
@@ -369,16 +390,17 @@ class Slider extends React.Component<Props> {
               opacity: this.height,
               transform: [
                 {
-                  translateY: ballonTranslateY
+                  translateY: ballonTranslateY,
                 },
                 {
-                  translateX: this.clamped_x
+                  translateX: this.clamped_x,
                 },
                 {
-                  scale: this.height
-                }
-              ]
-            }}>
+                  scale: this.height,
+                },
+              ],
+            }}
+          >
             {ballonRenderer({ text: ballon })}
           </Animated.View>
         </Animated.View>
